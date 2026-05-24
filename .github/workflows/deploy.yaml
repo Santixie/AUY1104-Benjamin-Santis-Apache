@@ -1,0 +1,57 @@
+name: Publicar Apache y desplegar en K3S
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+jobs:
+  build-and-push:
+    name: Build and push Docker image
+    runs-on: ubuntu-latest
+    steps:
+      - name: 1 · Descargar código
+        uses: actions/checkout@v4
+
+      - name: 2 · Iniciar sesión en Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: 3 · Construir y publicar imagen
+        run: |
+          IMAGEN_COMPLETA="${{ secrets.DOCKER_USERNAME }}/apache-web"
+          docker build \
+            -t "${IMAGEN_COMPLETA}:${{ github.ref_name }}" \
+            -t "${IMAGEN_COMPLETA}:latest" \
+            .
+          docker push --all-tags "${IMAGEN_COMPLETA}"
+
+  deploy-to-k8s:
+    name: Deploy to AWS K3S
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: 1 · Configurar clave SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.EA2_SSH_PRIVATE_KEY }}
+
+      - name: 2 · Verificar conexión SSH
+        run: ssh -o StrictHostKeyChecking=accept-new "ubuntu@${{ vars.K3S_SERVER_PUBLIC_IP }}" 'echo ok'
+
+      - name: 3 · Descargar manifiestos
+        uses: actions/checkout@v4
+
+      - name: 4 · Copiar manifiestos y aplicar
+        run: |
+          set -euo pipefail
+          ssh -o StrictHostKeyChecking=accept-new "ubuntu@${{ vars.K3S_SERVER_PUBLIC_IP }}" 'sudo rm -rf /tmp/k8s-apache'
+          scp -o StrictHostKeyChecking=accept-new -r k8s "ubuntu@${{ vars.K3S_SERVER_PUBLIC_IP }}:/tmp/k8s-apache"
+          ssh -o StrictHostKeyChecking=accept-new "ubuntu@${{ vars.K3S_SERVER_PUBLIC_IP }}" \
+            'sudo k3s kubectl apply -f /tmp/k8s-apache/'
+
+      - name: 5 · Verificar pods
+        run: ssh -o StrictHostKeyChecking=accept-new "ubuntu@${{ vars.K3S_SERVER_PUBLIC_IP }}" 'sudo k3s kubectl get pods -o wide'

@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: apache-web
+  labels:
+    app: apache-web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: apache-web
+  template:
+    metadata:
+      labels:
+        app: apache-web
+    spec:
+      containers:
+        - name: apache-web
+          image: bnjmn265/apache-web:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20

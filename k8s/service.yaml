@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: apache-web
+  labels:
+    app: apache-web
+spec:
+  type: NodePort
+  selector:
+    app: apache-web
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      nodePort: 30100
